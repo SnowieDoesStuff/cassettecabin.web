@@ -66,30 +66,26 @@ function CabinApp() {
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  // Fetch initial data
-  useEffect(() => {
-    // 1. Fetch Users
-    fetch('/api/users')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.users) {
-          setAllUsers(data.users);
-          // Check localStorage for saved account session
-          const savedId = localStorage.getItem('cassette_cabin_active_user_id');
-          let active: User | undefined;
-          if (savedId) {
-            active = data.users.find((u: User) => u.id === savedId);
-          }
-          if (!active) {
-            active = data.users.find((u: User) => u.email === 'papaswee1@gmail.com') || data.users[0];
-          }
-          if (active) {
-            setCurrentUser(active);
-            localStorage.setItem('cassette_cabin_active_user_id', active.id);
-          }
-        }
-      })
-      .catch(() => {});
+      // 1. Safe Session Load for Netlify
+    const savedId = localStorage.getItem('cassette_cabin_active_user_id');
+    const savedName = localStorage.getItem('cassette_cabin_active_user_name') || 'Cabin Member';
+    const savedEmail = localStorage.getItem('cassette_cabin_active_user_email') || 'user@cassettecabin.com';
+
+    if (savedId) {
+      setCurrentUser({
+        id: savedId,
+        email: savedEmail,
+        displayName: savedName,
+        avatarUrl: '',
+        bio: '',
+        friends: [],
+        allowMessagingFrom: 'everyone',
+        isOnline: true
+      });
+    } else {
+      setCurrentUser(null); 
+    }
+
 
     // 2. Fetch Tracks
     fetch('/api/tracks')
