@@ -186,11 +186,12 @@ function CabinApp() {
 
   // Auth actions
   const handleLogin = async (email: string, displayName?: string, password?: string) => {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      (import.meta as any).env.VITE_SUPABASE_URL,
-      (import.meta as any).env.VITE_SUPABASE_ANON_KEY
-    );
+       const { createClient } = await import('@supabase/supabase-js');
+    
+    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || (window as any)._env_?.SUPABASE_URL || '';
+    const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || (window as any)._env_?.SUPABASE_ANON_KEY || '';
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     let authData;
     let authError;
