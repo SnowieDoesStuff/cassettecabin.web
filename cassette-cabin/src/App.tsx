@@ -265,7 +265,6 @@ function CabinApp() {
   };
 
   // Profile update action
-Use code with caution.
 const handleSaveProfile = async (updated: Partial) => {
 if (!currentUser) return;
 const res = await fetch(/api/users/${currentUser.id}, {
