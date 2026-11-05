@@ -185,51 +185,30 @@ function CabinApp() {
     };
   }, [currentUser?.id]);
 
-    // Auth actions
+  // Auth actions
   const handleLogin = async (email: string, displayName?: string, password?: string) => {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      (import.meta as any).env.VITE_SUPABASE_URL || '',
-      (import.meta as any).env.VITE_SUPABASE_ANON_KEY || ''
-    );
-
-    if (!password) throw new Error("Password is required.");
-
-    // Sign in or auto-signup if new account
-    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    
-    if (authError && authError.message.includes('Invalid login credentials')) {
-      const signUpRes = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: displayName || email.split('@')[0] } }
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, displayName, password }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Failed to sign in');
+    }
+    if (data.user) {
+      setCurrentUser(data.user);
+      localStorage.setItem('cassette_cabin_active_user_id', data.user.id);
+      if (currentView === 'profile') {
+        setSelectedUserId(data.user.id);
+      }
+      setAllUsers((prev) => {
+        const exists = prev.some((u) => u.id === data.user.id);
+        return exists ? prev.map((u) => (u.id === data.user.id ? data.user : u)) : [...prev, data.user];
       });
-      authData = signUpRes.data;
-      authError = signUpRes.error;
-    }
-
-    if (authError || !authData?.user) {
-      throw new Error(authError?.message || 'Authentication failed');
-    }
-
-    const formattedUser: User = {
-      id: authData.user.id,
-      email: authData.user.email || email,
-      displayName: authData.user.user_metadata?.display_name || displayName || email.split('@')[0],
-      avatarUrl: '', 
-      bio: '',
-      friends: [],
-      allowMessagingFrom: 'everyone',
-      isOnline: true
-    };
-
-    setCurrentUser(formattedUser);
-    localStorage.setItem('cassette_cabin_active_user_id', formattedUser.id);
-    localStorage.setItem('cassette_cabin_active_user_name', formattedUser.displayName);
-    localStorage.setItem('cassette_cabin_active_user_email', formattedUser.email);
-    
-    if (currentView === 'profile') {
-      setSelectedUserId(formattedUser.id);
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: 'auth', userId: data.user.id }));
+      }
     }
   };
 
