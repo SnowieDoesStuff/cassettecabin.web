@@ -66,7 +66,9 @@ function CabinApp() {
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-      // 1. Safe Session Load for Netlify
+  // Fetch initial data
+  useEffect(() => {
+    // 1. Safe Session Load for Netlify
     const savedId = localStorage.getItem('cassette_cabin_active_user_id');
     const savedName = localStorage.getItem('cassette_cabin_active_user_name') || 'Cabin Member';
     const savedEmail = localStorage.getItem('cassette_cabin_active_user_email') || 'user@cassettecabin.com';
@@ -85,7 +87,6 @@ function CabinApp() {
     } else {
       setCurrentUser(null); 
     }
-
 
     // 2. Fetch Tracks
     fetch('/api/tracks')
@@ -125,7 +126,6 @@ function CabinApp() {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'presence') {
-          // Update online status in allUsers & currentUser
           setAllUsers((prev) =>
             prev.map((u) => (u.id === payload.userId ? { ...u, isOnline: payload.isOnline } : u))
           );
@@ -182,7 +182,7 @@ function CabinApp() {
 
   // Auth actions
   const handleLogin = async (email: string, displayName?: string, password?: string) => {
-       const { createClient } = await import('@supabase/supabase-js');
+    const { createClient } = await import('@supabase/supabase-js');
     
     const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || (window as any)._env_?.SUPABASE_URL || '';
     const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || (window as any)._env_?.SUPABASE_ANON_KEY || '';
@@ -228,6 +228,8 @@ function CabinApp() {
 
     setCurrentUser(formattedUser);
     localStorage.setItem('cassette_cabin_active_user_id', formattedUser.id);
+    localStorage.setItem('cassette_cabin_active_user_name', formattedUser.displayName);
+    localStorage.setItem('cassette_cabin_active_user_email', formattedUser.email);
     
     if (currentView === 'profile') {
       setSelectedUserId(formattedUser.id);
@@ -263,239 +265,220 @@ function CabinApp() {
   };
 
   // Profile update action
-  const handleSaveProfile = async (updated: Partial<User>) => {
-    if (!currentUser) return;
-    const res = await fetch(`/api/users/${currentUser.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      throw new Error(data.error || 'Failed to update profile');
-    }
-    setCurrentUser(data.user);
-    setAllUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
-  };
-
-  // Toggle friend action
-  const handleToggleFriend = async (targetUserId: string) => {
-    if (!currentUser) {
-      setIsAuthOpen(true);
-      return;
-    }
-    const isFriend = currentUser.friends.includes(targetUserId);
-    const action = isFriend ? 'remove' : 'add';
-    const res = await fetch('/api/friends/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: currentUser.id,
-        targetUserId,
-        action,
-      }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setCurrentUser((prev) => (prev ? { ...prev, friends: data.friends } : null));
-    }
-  };
-
-  // Playlist track update
-  const handleUpdatePlaylist = async (playlistId: string, trackId: string, action: 'add' | 'remove') => {
-    const res = await fetch(`/api/playlists/${playlistId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trackId, action }),
-    });
-    const data = await res.json();
-    if (data.playlist) {
-      setPlaylists((prev) => prev.map((p) => (p.id === data.playlist.id ? data.playlist : p)));
-    }
-  };
-
-  // Navigation handlers
-  const navigateToHome = () => {
-    setCurrentView('home');
-    setSelectedTrack(null);
-    setSelectedUserId(null);
-  };
-
-  const navigateToTrack = (track: Track) => {
-    setSelectedTrack(track);
-    setCurrentView('song');
-  };
-
-  const navigateToProfile = (userId?: string) => {
-    const target = userId || currentUser?.id;
-    if (target) {
-      setSelectedUserId(target);
-      setCurrentView('profile');
-    } else {
-      setIsAuthOpen(true);
-    }
-  };
-
-  // Determine active profile to display
-  const activeProfileUser = allUsers.find((u) => u.id === selectedUserId) || currentUser;
-
-  return (
-    <div className="min-h-screen bg-[#FBF8F3] dark:bg-[#1A1411] text-[#3E2F26] dark:text-[#F3EDE2] transition-colors duration-200 flex flex-col font-['Comic_Sans_MS',_'Comic_Sans',_'Comic_Neue',_cursive,_sans-serif]">
-      {/* Top Navbar */}
-      <Navbar
-        currentUser={currentUser}
-        onNavigateHome={navigateToHome}
-        onNavigateProfile={navigateToProfile}
-        onOpenCreate={() => {
-          if (!currentUser) setIsAuthOpen(true);
-          else setIsCreateOpen(true);
-        }}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenDMs={() => {
-          if (!currentUser) {
-            setIsAuthOpen(true);
-            return;
-          }
-          // Pick the first other friend or user to DM
-          const other = allUsers.find((u) => u.id !== currentUser.id) || allUsers[0];
-          if (other) {
-            setDmRecipient(other);
-          }
-        }}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        currentView={currentView}
-      />
-
-      {/* Main Content Area */}
-      <main className="flex-1 pb-24">
-        {currentView === 'home' && (
-          <HomeView
-            tracks={tracks}
-            onSelectTrack={navigateToTrack}
-            onOpenCreate={() => {
-              if (!currentUser) setIsAuthOpen(true);
-              else setIsCreateOpen(true);
-            }}
-            onSelectUser={navigateToProfile}
-          />
-        )}
-
-        {currentView === 'song' && selectedTrack && (
-          <SongPage
-            track={selectedTrack}
-            currentUser={currentUser}
-            onBack={navigateToHome}
-            onOpenPlaylistModal={(trackId) => {
-              setPlaylistModalTrackId(trackId);
-              setIsPlaylistModalOpen(true);
-            }}
-            onSelectUser={navigateToProfile}
-            onRequireAuth={() => setIsAuthOpen(true)}
-          />
-        )}
-
-        {currentView === 'profile' && activeProfileUser && (
-          <ProfilePage
-            user={activeProfileUser}
-            currentUser={currentUser}
-            tracks={tracks}
-            playlists={playlists}
-            onEditProfile={() => setIsEditProfileOpen(true)}
-            onSelectTrack={navigateToTrack}
-            onOpenMessage={(targetUser) => setDmRecipient(targetUser)}
-            onToggleFriend={handleToggleFriend}
-            onSelectPlaylist={() => {}}
-          />
-        )}
-      </main>
-
-      {/* Global Bottom Audio Player Bar */}
-      <BottomPlayerBar
-        onOpenSongPage={() => {
-          if (selectedTrack) setCurrentView('song');
-        }}
-        currentView={currentView}
-      />
-
-      {/* Modals */}
-      {currentUser && (
-        <>
-          <CreateTrackModal
-            currentUser={currentUser}
-            isOpen={isCreateOpen}
-            onClose={() => setIsCreateOpen(false)}
-            onTrackCreated={(track) => {
-              setTracks((prev) => [track, ...prev]);
-              navigateToTrack(track);
-            }}
-          />
-
-          <EditProfileModal
-            key={currentUser.id}
-            user={currentUser}
-            isOpen={isEditProfileOpen}
-            onClose={() => setIsEditProfileOpen(false)}
-            onSave={handleSaveProfile}
-          />
-        </>
-      )}
-
-      <PlaylistModal
-        trackId={playlistModalTrackId}
-        currentUser={currentUser}
-        playlists={playlists}
-        isOpen={isPlaylistModalOpen}
-        onClose={() => setIsPlaylistModalOpen(false)}
-        onPlaylistCreated={(playlist) => {
-          setPlaylists((prev) => [...prev, playlist]);
-        }}
-        onUpdatePlaylist={handleUpdatePlaylist}
-        onRequireAuth={() => setIsAuthOpen(true)}
-      />
-
-      {currentUser && dmRecipient && (
-        <DirectMessageModal
-          currentUser={currentUser}
-          recipientUser={dmRecipient}
-          isOpen={!!dmRecipient}
-          onClose={() => setDmRecipient(null)}
-          allUsers={allUsers}
-          onSelectUser={(u) => setDmRecipient(u)}
-        />
-      )}
-
-      <SettingsModal
-        currentUser={currentUser}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        isDarkMode={isDarkMode}
-        onToggleTheme={(enableDark) => setIsDarkMode(enableDark)}
-        onUpdatePrivacy={(privacy) => {
-          if (currentUser) {
-            handleSaveProfile({ allowMessagingFrom: privacy });
-          }
-        }}
-        onUpdatePassword={handleUpdatePassword}
-        onSwitchAccount={() => {
-          setIsSettingsOpen(false);
-          setIsAuthOpen(true);
-        }}
-      />
-
-      <GoogleAuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onLogin={handleLogin}
-        existingUsers={allUsers}
-      />
-    </div>
-  );
+Use code with caution.
+const handleSaveProfile = async (updated: Partial) => {
+if (!currentUser) return;
+const res = await fetch(/api/users/${currentUser.id}, {
+method: 'PUT',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(updated),
+});
+const data = await res.json();
+if (!res.ok || data.error) {
+throw new Error(data.error || 'Failed to update profile');
 }
+setCurrentUser(data.user);
+setAllUsers((prev) => prev.map((u) => (u.id === data.user.id ? data.user : u)));
+};
+// Toggle friend action
+const handleToggleFriend = async (targetUserId: string) => {
+if (!currentUser) {
+setIsAuthOpen(true);
+return;
+}
+const isFriend = currentUser.friends.includes(targetUserId);
+const action = isFriend ? 'remove' : 'add';
+const res = await fetch('/api/friends/action', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+userId: currentUser.id,
+targetUserId,
+action,
+}),
+});
+const data = await res.json();
+if (data.success) {
+setCurrentUser((prev) => (prev ? { ...prev, friends: data.friends } : null));
+}
+};
+// Playlist track update
+const handleUpdatePlaylist = async (playlistId: string, trackId: string, action: 'add' | 'remove') => {
+const res = await fetch(/api/playlists/${playlistId}, {
+method: 'PUT',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ trackId, action }),
+});
+const data = await res.json();
+if (data.playlist) {
+setPlaylists((prev) => prev.map((p) => (p.id === data.playlist.id ? data.playlist : p)));
+}
+};
+// Navigation handlers
+const navigateToHome = () => {
+setCurrentView('home');
+setSelectedTrack(null);
+setSelectedUserId(null);
+};
+const navigateToTrack = (track: Track) => {
+setSelectedTrack(track);
+setCurrentView('song');
+};
+const navigateToProfile = (userId?: string) => {
+const target = userId || currentUser?.id;
+if (target) {
+setSelectedUserId(target);
+setCurrentView('profile');
+} else {
+setIsAuthOpen(true);
+}
+};
+// Determine active profile to display
+const activeProfileUser = allUsers.find((u) => u.id === selectedUserId) || currentUser;
+return (
 
+{/* Top Navbar */}
+<Navbar
+currentUser={currentUser}
+onNavigateHome={navigateToHome}
+onNavigateProfile={navigateToProfile}
+onOpenCreate={() => {
+if (!currentUser) setIsAuthOpen(true);
+else setIsCreateOpen(true);
+}}
+onOpenSettings={() => setIsSettingsOpen(true)}
+onOpenDMs={() => {
+if (!currentUser) {
+setIsAuthOpen(true);
+return;
+}
+const other = allUsers.find((u) => u.id !== currentUser.id) || allUsers[0];
+if (other) {
+setDmRecipient(other);
+}
+}}
+onOpenAuth={() => setIsAuthOpen(true)}
+currentView={currentView}
+/>
+{/* Main Content Area */}
+
+{currentView === 'home' && (
+<HomeView
+tracks={tracks}
+onSelectTrack={navigateToTrack}
+onOpenCreate={() => {
+if (!currentUser) setIsAuthOpen(true);
+else setIsCreateOpen(true);
+}}
+onSelectUser={navigateToProfile}
+/>
+)}
+{currentView === 'song' && selectedTrack && (
+<SongPage
+track={selectedTrack}
+currentUser={currentUser}
+onBack={navigateToHome}
+onOpenPlaylistModal={(trackId) => {
+setPlaylistModalTrackId(trackId);
+setIsPlaylistModalOpen(true);
+}}
+onSelectUser={navigateToProfile}
+onRequireAuth={() => setIsAuthOpen(true)}
+/>
+)}
+{currentView === 'profile' && activeProfileUser && (
+<ProfilePage
+user={activeProfileUser}
+currentUser={currentUser}
+tracks={tracks}
+playlists={playlists}
+onEditProfile={() => setIsEditProfileOpen(true)}
+onSelectTrack={navigateToTrack}
+onOpenMessage={(targetUser) => setDmRecipient(targetUser)}
+onToggleFriend={handleToggleFriend}
+onSelectPlaylist={() => {}}
+/>
+)}
+{/* Global Bottom Audio Player Bar */}
+<BottomPlayerBar
+onOpenSongPage={() => {
+if (selectedTrack) setCurrentView('song');
+}}
+currentView={currentView}
+/>
+{/* Modals */}
+{currentUser && (
+<>
+<CreateTrackModal
+currentUser={currentUser}
+isOpen={isCreateOpen}
+onClose={() => setIsCreateOpen(false)}
+onTrackCreated={(track) => {
+setTracks((prev) => [track, ...prev]);
+navigateToTrack(track);
+}}
+/>
+<EditProfileModal
+key={currentUser.id}
+user={currentUser}
+isOpen={isEditProfileOpen}
+onClose={() => setIsEditProfileOpen(false)}
+onSave={handleSaveProfile}
+/>
+</>
+)}
+<PlaylistModal
+trackId={playlistModalTrackId}
+currentUser={currentUser}
+playlists={playlists}
+isOpen={isPlaylistModalOpen}
+onClose={() => setIsPlaylistModalOpen(false)}
+onPlaylistCreated={(playlist) => {
+setPlaylists((prev) => [...prev, playlist]);
+}}
+onUpdatePlaylist={handleUpdatePlaylist}
+onRequireAuth={() => setIsAuthOpen(true)}
+/>
+{currentUser && dmRecipient && (
+<DirectMessageModal
+currentUser={currentUser}
+recipientUser={dmRecipient}
+isOpen={!!dmRecipient}
+onClose={() => setDmRecipient(null)}
+allUsers={allUsers}
+onSelectUser={(u) => setDmRecipient(u)}
+/>
+)}
+<SettingsModal
+currentUser={currentUser}
+isOpen={isSettingsOpen}
+onClose={() => setIsSettingsOpen(false)}
+isDarkMode={isDarkMode}
+onToggleTheme={(enableDark) => setIsDarkMode(enableDark)}
+onUpdatePrivacy={(privacy) => {
+if (currentUser) {
+handleSaveProfile({ allowMessagingFrom: privacy });
+}
+}}
+onUpdatePassword={handleUpdatePassword}
+onSwitchAccount={() => {
+setIsSettingsOpen(false);
+setIsAuthOpen(true);
+}}
+/>
+<GoogleAuthModal
+isOpen={isAuthOpen}
+onClose={() => setIsAuthOpen(false)}
+onLogin={handleLogin}
+existingUsers={allUsers}
+/>
+
+);
+}
 export default function App() {
-  return (
-    <AudioProvider>
-      <CabinApp />
-    </AudioProvider>
-  );
+return (
+
+
+
+);
 }
