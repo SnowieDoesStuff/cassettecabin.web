@@ -1,6 +1,0 @@
-{
-  "name": "Cassette Cabin",
-  "description": "A cozy, pastel-beige music streaming, playlist sharing, creator profile, and encrypted real-time community.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
